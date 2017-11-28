@@ -92,7 +92,7 @@ class Interval:
         it resulted from a split, it has two parents.
     children : list of `Interval`s
         The intervals resulting from a split or refinement.
-    done_points : dict
+    done_points : dict`tol` 
         A dictionary with the x-values and y-values: `{x1: y1, x2: y2 ...}`.
     est_err : float
         The sum of the errors of the children, if one of the children is not ready yet,
@@ -175,7 +175,7 @@ class Interval:
 
     def refine(self):
         ival = Interval(self.a, self.b)
-        ival.tol = self.tol
+        ival.tol = self.rtol
         ival.rdepth = self.rdepth
         ival.ndiv = self.ndiv
         ival.c = self.c.copy()
@@ -199,7 +199,7 @@ class Interval:
 
         for ival in ivals:
             ival.depth = 0
-            ival.tol = self.tol / sqrt(2)
+            ival.tol = self.rtol / sqrt(2)
             ival.c_old = self.c_old.copy()
             ival.rdepth = self.rdepth + 1
             ival.parent = self
@@ -337,13 +337,13 @@ class IntegratorLearner(BaseLearner):
             The function to learn.
         bounds : pair of reals
             The bounds of the interval on which to learn 'function'.
-        tol : float
+        atol : float
             Absolute tolerance of the error to the integral, this means that the
-            learner is done when: `tol > err`.
+            learner is done when: `atol > err`.
         rtol : float, optional
             Relative tolerance of the error to the integral, this means that the
-            learner is done when: `tol > err / abs(igral)`. If `rtol` is
-            provided, `tol` is optional. If both `rtol` and `tol`
+            learner is done when: `rtol > err / abs(igral)`. If `rtol` is
+            provided, `atol` is optional. If both `rtol` and `atol`
             are provided, both conditions must be satisfied.
 
         Attributes
@@ -360,16 +360,16 @@ class IntegratorLearner(BaseLearner):
         Methods
         ------- 
         done : bool
-            Returns whether the `tol` has been reached.
+            Returns whether the tolerance criteria has been reached.
         plot : hv.Scatter
             Plots all the points that are evaluated.
         """
         self.function = function
         self.bounds = bounds
-        self.tol = tol
+        self.atol = atol
         self.rtol = rtol
-        if self.rtol is None and self.tol is None:
-            raise ValueError('One of `tol` or `rtol` must be provided.')
+        if self.rtol is None and self.atol is None:
+            raise ValueError('One of `atol` or `rtol` must be provided.')
         self.priority_split = []
         self.ivals = SortedSet([], key=attrgetter('err'))
         self.done_points = {}
@@ -378,7 +378,7 @@ class IntegratorLearner(BaseLearner):
         self._err_final = 0
         self._igral_final = 0
         self.x_mapping = defaultdict(lambda: SortedSet([], key=attrgetter('rdepth')))
-        ival, points = Interval.make_first(*self.bounds, self.tol)
+        ival, points = Interval.make_first(*self.bounds, self.atol)
         self._update_ival(ival, points)
         self.first_ival = ival
         self._complete_branches = []
@@ -558,11 +558,11 @@ class IntegratorLearner(BaseLearner):
     def done(self):
         err = self.err
         igral = self.igral
-        if self.tol is not None:
+        if self.atol is not None:
             is_done = (err == 0
-                    or err < self.tol
-                    or (self._err_final > self.tol
-                        and err - self._err_final < self.tol)
+                    or err < self.atol
+                    or (self._err_final > self.atol
+                        and err - self._err_final < self.atol)
                     or not self.ivals)
         else:
             is_done = True
@@ -577,7 +577,7 @@ class IntegratorLearner(BaseLearner):
         return is_done and is_rdone
 
     def loss(self, real=True):
-        return abs(abs(self.igral) * self.tol - self.err)
+        return abs(abs(self.igral) * self.rtol - self.err)
 
     def equal(self, other, *, verbose=False):
         """Note: `other` is a list of ivals."""
