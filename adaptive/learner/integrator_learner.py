@@ -329,7 +329,7 @@ class Interval:
 
 class IntegratorLearner(BaseLearner):
 
-    def __init__(self, function, bounds, tol):
+    def __init__(self, function, bounds, tol=None, rtol=None):
         """
         Parameters
         ----------
@@ -338,8 +338,13 @@ class IntegratorLearner(BaseLearner):
         bounds : pair of reals
             The bounds of the interval on which to learn 'function'.
         tol : float
+            Absolute tolerance of the error to the integral, this means that the
+            learner is done when: `tol > err`.
+        rtol : float, optional
             Relative tolerance of the error to the integral, this means that the
-            learner is done when: `tol > err / abs(igral)`.
+            learner is done when: `tol > err / abs(igral)`. If `rtol` is
+            provided, `tol` is optional. If both `rtol` and `tol`
+            are provided, both conditions must be satisfied.
 
         Attributes
         ----------
@@ -362,6 +367,9 @@ class IntegratorLearner(BaseLearner):
         self.function = function
         self.bounds = bounds
         self.tol = tol
+        self.rtol = rtol
+        if self.rtol is None and self.tol is None:
+            raise ValueError('One of `tol` or `rtol` must be provided.')
         self.priority_split = []
         self.ivals = SortedSet([], key=attrgetter('err'))
         self.done_points = {}
@@ -550,11 +558,23 @@ class IntegratorLearner(BaseLearner):
     def done(self):
         err = self.err
         igral = self.igral
-        return (err == 0
-                or err < abs(igral) * self.tol
-                or (self._err_final > abs(igral) * self.tol
-                    and err - self._err_final < abs(igral) * self.tol)
-                or not self.ivals)
+        if self.tol is not None:
+            is_done = (err == 0
+                    or err < self.tol
+                    or (self._err_final > self.tol
+                        and err - self._err_final < self.tol)
+                    or not self.ivals)
+        else:
+            is_done = True
+        if self.rtol is not None:
+            is_rdone = (err == 0
+                    or err < abs(igral) * self.rtol
+                    or (self._err_final > abs(igral) * self.rtol
+                        and err - self._err_final < abs(igral) * self.rtol)
+                    or not self.ivals)
+        else:
+            is_rdone = True
+        return is_done and is_rdone
 
     def loss(self, real=True):
         return abs(abs(self.igral) * self.tol - self.err)
