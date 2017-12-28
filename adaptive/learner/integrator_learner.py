@@ -428,7 +428,7 @@ class IntegratorLearner(BaseLearner):
         # XXX: to-do if all the ivals have err=inf, take the interval
         # with the lowest rdepth and no children.
         force_split = bool(self.priority_split)
-        ival = self.ivals[-1] if not force_split else self.priority_split.pop()
+        ival = max(self.ivals, key=attrgetter('err')) if not force_split else self.priority_split.pop()
         assert not ival.children, force_split
 
         # Remove the interval from the err sorted set because we're going to
