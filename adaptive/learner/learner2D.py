@@ -442,8 +442,6 @@ class Learner2D(BaseLearner):
                                 mode='constant',
                                 constant_values=np.nan).reshape(-1, 2)
                 tris = hv.EdgePaths([points])
-            else:
-                tris = hv.EdgePaths([])
         else:
             im = hv.Image([], bounds=lbrt)
             tris = hv.EdgePaths([])
@@ -452,4 +450,7 @@ class Learner2D(BaseLearner):
         tri_opts = dict(line_width=0.5, alpha=tri_alpha)
         no_hover = dict(plot=dict(inspection_policy=None, tools=[]))
 
-        return im.opts(style=im_opts) * tris.opts(style=tri_opts, **no_hover)
+        if tri_alpha:
+            return im.opts(style=im_opts) * tris.opts(style=tri_opts, **no_hover)
+        else:
+            return im.opts(style=im_opts)
