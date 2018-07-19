@@ -90,7 +90,7 @@ def choose_point_in_simplex(simplex, transform=None):
     return np.linalg.solve(transform, point)
 
 
-class LearnerND(BaseLearner):
+class TriangulatingLearner(BaseLearner):
     """Learns and predicts a function 'f: ℝ^N → ℝ^M'.
 
     Parameters
