@@ -216,7 +216,7 @@ class Learner1D(BaseLearner):
 
         if real:
             # either it is a float/int, if not, try casting to a np.array
-            if type(y) not in [float, int]:
+            if not isinstance(y, (float, int)):
                 y = np.asarray(y, dtype='float64')
 
             # Add point to the real data dict
