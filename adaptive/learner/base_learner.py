@@ -9,8 +9,6 @@ class BaseLearner(metaclass=abc.ABCMeta):
 
     Attributes
     ----------
-    function : callable: X → Y
-        The function to learn.
     data : dict: X → Y
         'function' evaluated at certain points.
         The values can be 'None', which indicates that the point

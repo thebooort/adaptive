@@ -9,11 +9,6 @@ from ..notebook_integration import ensure_holoviews
 from ..utils import restore, named_product
 
 
-def dispatch(child_functions, arg):
-    index, x = arg
-    return child_functions[index](x)
-
-
 class BalancingLearner(BaseLearner):
     """Choose the optimal points from a set of learners.
 
@@ -48,11 +43,6 @@ class BalancingLearner(BaseLearner):
 
     def __init__(self, learners, *, cdims=None):
         self.learners = learners
-
-        # Naively we would make 'function' a method, but this causes problems
-        # when using executors from 'concurrent.futures' because we have to
-        # pickle the whole learner.
-        self.function = partial(dispatch, [l.function for l in self.learners])
 
         self._points = {}
         self._loss = {}

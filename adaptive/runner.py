@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import concurrent.futures as concurrent
+import collections
 from contextlib import suppress
 import functools
 import inspect
@@ -53,6 +54,11 @@ else:
     _default_executor_kwargs = {}
 
 
+def dispatch(child_functions, arg):
+    index, x = arg
+    return child_functions[index](x)
+
+
 class BaseRunner:
     """Base class for runners that use concurrent.futures.Executors.
 
@@ -80,7 +86,7 @@ class BaseRunner:
         by the runner is shut down, regardless of this parameter.
     retries : int, default: 0
         Maximum amount of retries of a certain point 'x' in
-        'learner.function(x)'. After 'retries' is reached for 'x' the
+        'runner.function(x)'. After 'retries' is reached for 'x' the
         point is present in 'runner.failed'.
     raise_if_retries_exceeded : bool, default: True
         Raise the error after a point 'x' failed 'retries'.
@@ -114,7 +120,7 @@ class BaseRunner:
         Set of points that failed 'retries' times.
     """
 
-    def __init__(self, learner, goal, *,
+    def __init__(self, learner, function, goal, *,
                  executor=None, ntasks=None, log=False,
                  shutdown_executor=False, retries=0,
                  raise_if_retries_exceeded=True):
@@ -133,8 +139,19 @@ class BaseRunner:
         self.learner = learner
         self.log = [] if log else None
 
-        # Function timing
-        self.function = functools.partial(timed, self.learner.function)
+        # Function and timing
+        self._function = function  # original function
+
+        if hasattr(self.learner, 'learners'):
+            # Naively we would make 'function' a method, but this causes problems
+            # when using executors from 'concurrent.futures' because we have to
+            # pickle the whole learner.
+            assert isinstance(function, collections.Iterable)
+            self.function = functools.partial(dispatch, [f for f in function])
+        else:
+            self.function = function
+
+        self.function = functools.partial(timed, self.function)
         self.start_time = time.time()
         self.end_time = None
         self._elapsed_function_time = 0
@@ -152,7 +169,7 @@ class BaseRunner:
         tb = self.tracebacks[x]
         raise RuntimeError(
             'An error occured while evaluating '
-            f'"learner.function({x})". '
+            f'"self.function({x})". '
             f'See the traceback for details.:\n\n{tb}'
         ) from e
 
@@ -274,7 +291,7 @@ class BlockingRunner(BaseRunner):
         by the runner is shut down, regardless of this parameter.
     retries : int, default: 0
         Maximum amount of retries of a certain point 'x' in
-        'learner.function(x)'. After 'retries' is reached for 'x' the
+        'runner.function(x)'. After 'retries' is reached for 'x' the
         point is present in 'runner.failed'.
     raise_if_retries_exceeded : bool, default: True
         Raise the error after a point 'x' failed 'retries'.
@@ -311,14 +328,14 @@ class BlockingRunner(BaseRunner):
         Set of points that failed 'retries' times.
     """
 
-    def __init__(self, learner, goal, *,
+    def __init__(self, learner, function, goal, *,
                  executor=None, ntasks=None, log=False,
                  shutdown_executor=False, retries=0,
                  raise_if_retries_exceeded=True):
-        if inspect.iscoroutinefunction(learner.function):
+        if inspect.iscoroutinefunction(self._function):
             raise ValueError("Coroutine functions can only be used "
                              "with 'AsyncRunner'.")
-        super().__init__(learner, goal, executor=executor, ntasks=ntasks,
+        super().__init__(learner, goal, function, executor=executor, ntasks=ntasks,
                          log=log, shutdown_executor=shutdown_executor,
                          retries=retries,
                          raise_if_retries_exceeded=raise_if_retries_exceeded)
@@ -384,7 +401,7 @@ class AsyncRunner(BaseRunner):
         the default event loop is used.
     retries : int, default: 0
         Maximum amount of retries of a certain point 'x' in
-        'learner.function(x)'. After 'retries' is reached for 'x' the
+        'runner.function(x)'. After 'retries' is reached for 'x' the
         point is present in 'runner.failed'.
     raise_if_retries_exceeded : bool, default: True
         Raise the error after a point 'x' failed 'retries'.
@@ -429,7 +446,7 @@ class AsyncRunner(BaseRunner):
     run directly on the event loop (and not in the executor).
     """
 
-    def __init__(self, learner, goal=None, *,
+    def __init__(self, learner, function, goal=None, *,
                  executor=None, ntasks=None, log=False,
                  shutdown_executor=False, ioloop=None,
                  retries=0, raise_if_retries_exceeded=True):
@@ -438,7 +455,7 @@ class AsyncRunner(BaseRunner):
             def goal(_):
                 return False
 
-        super().__init__(learner, goal, executor=executor, ntasks=ntasks,
+        super().__init__(learner, function, goal, executor=executor, ntasks=ntasks,
                          log=log, shutdown_executor=shutdown_executor,
                          retries=retries,
                          raise_if_retries_exceeded=raise_if_retries_exceeded)
@@ -449,7 +466,7 @@ class AsyncRunner(BaseRunner):
         # directly on the event loop, and not in the executor.
         # The *whole point* of allowing learning of async functions is so that
         # the user can have more fine-grained control over the parallelism.
-        if inspect.iscoroutinefunction(learner.function):
+        if inspect.iscoroutinefunction(self._function):
             if executor:  # user-provided argument
                 raise RuntimeError('Cannot use an executor when learning an '
                                    'async function.')
@@ -557,7 +574,7 @@ class AsyncRunner(BaseRunner):
 Runner = AsyncRunner
 
 
-def simple(learner, goal):
+def simple(learner, goal, function):
     """Run the learner until the goal is reached.
 
     Requests a single point from the learner, evaluates
@@ -576,10 +593,18 @@ def simple(learner, goal):
         The end condition for the calculation. This function must take the
         learner as its sole argument, and return True if we should stop.
     """
+    if isinstance(function, collections.Iterable):
+        # Naively we would make 'function' a method, but this causes problems
+        # when using executors from 'concurrent.futures' because we have to
+        # pickle the whole learner.
+        _function = functools.partial(dispatch, [f for f in function])
+    else:
+        _function = function
+
     while not goal(learner):
         xs, _ = learner.ask(1)
         for x in xs:
-            y = learner.function(x)
+            y = _function(x)
             learner.tell(x, y)
 
 

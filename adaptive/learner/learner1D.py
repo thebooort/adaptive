@@ -60,9 +60,6 @@ class Learner1D(BaseLearner):
 
     Parameters
     ----------
-    function : callable
-        The function to learn. Must take a single real parameter and
-        return a real number.
     bounds : pair of reals
         The bounds of the interval on which to learn 'function'.
     loss_per_interval: callable, optional
@@ -85,8 +82,7 @@ class Learner1D(BaseLearner):
         to have values for both of the points in 'interval'.
     """
 
-    def __init__(self, function, bounds, loss_per_interval=None):
-        self.function = function
+    def __init__(self, bounds, loss_per_interval=None):
         self.loss_per_interval = loss_per_interval or default_loss
 
         # A dict storing the loss function for each interval x_n.
