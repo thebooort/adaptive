@@ -8,6 +8,7 @@ import os
 import time
 import traceback
 import warnings
+import abc
 
 from .notebook_integration import live_plot, live_info, in_ipynb
 from .utils import timed
@@ -53,7 +54,7 @@ else:
     _default_executor_kwargs = {}
 
 
-class BaseRunner:
+class BaseRunner(metaclass=abc.ABCMeta):
     """Base class for runners that use concurrent.futures.Executors.
 
     Parameters
@@ -245,6 +246,16 @@ class BaseRunner:
     def failed(self):
         """Set of points that failed 'self.retries' times."""
         return set(self.tracebacks) - set(self.to_retry)
+    
+    @abc.abstractmethod
+    def elapsed_time(self):
+        """Is called in 'overhead'."""
+        pass
+    
+    @abc.abstractmethod
+    def _submit(self, x):
+        """Is called in '_get_futures'."""
+        pass
     
 
 class BlockingRunner(BaseRunner):
@@ -454,9 +465,9 @@ class AsyncRunner(BaseRunner):
                 raise RuntimeError('Cannot use an executor when learning an '
                                    'async function.')
             self.executor.shutdown()  # Make sure we don't shoot ourselves later
-            self._submit = lambda x: self.ioloop.create_task(self.function(x))
+            self.__submit = lambda x: self.ioloop.create_task(self.function(x))
         else:
-            self._submit = functools.partial(self.ioloop.run_in_executor,
+            self.__submit = functools.partial(self.ioloop.run_in_executor,
                                              self.executor,
                                              self.function)
 
@@ -466,6 +477,9 @@ class AsyncRunner(BaseRunner):
                           "event loop is not running! If you are "
                           "in a Jupyter notebook, remember to run "
                           "'adaptive.notebook_extension()'")
+
+    def _submit(self, x):
+        return self.__submit(x)
 
     def status(self):
         """Return the runner status as a string.
