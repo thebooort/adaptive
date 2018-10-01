@@ -10,7 +10,8 @@ from . import utils
 
 from .learner import (BaseLearner, Learner1D, Learner2D, LearnerND,
 					  AverageLearner, BalancingLearner, make_datasaver,
-					  DataSaver, IntegratorLearner, AverageLearner2D)
+					  DataSaver, IntegratorLearner, AverageLearner1D,
+					  AverageLearner2D)
 
 with suppress(ImportError):
     # Only available if 'scikit-optimize' is installed
