@@ -10,7 +10,7 @@ from .learner1D import Learner1D
 from .average_mixin import AverageMixin
 
 
-class AverageLearner1D(AverageMixin, Learner1D):
+class AverageLearner1D(Learner1D):
     def __init__(self, function, bounds, loss_per_interval=None, weight=1):
         super().__init__(function, bounds, loss_per_interval)
         self._data = dict()  # {point: {seed: value}} mapping
@@ -31,7 +31,7 @@ class AverageLearner1D(AverageMixin, Learner1D):
         return x, seed
 
     def tell(self, x_seed, y):
-        x, seed = unpack_point(x_seed)
+        x, seed = self.unpack_point(x_seed)
 
         in_data = x in self._data
 
@@ -44,7 +44,7 @@ class AverageLearner1D(AverageMixin, Learner1D):
         self._update_data_structures(x, y)
 
     def tell_pending(self, x_seed):
-        x, seed = unpack_point(x_seed)
+        x, seed = self.unpack_point(x_seed)
 
         self._add_to_pending(x_seed)
 
@@ -73,3 +73,14 @@ class AverageLearner1D(AverageMixin, Learner1D):
             return scatter * spread
         else:
             return scatter
+
+    data = AverageMixin.data
+    data_sem = AverageMixin.data_sem
+    standard_error = AverageMixin.standard_error
+    mean_values_per_point = AverageMixin.mean_values_per_point
+    get_seed = AverageMixin.get_seed
+    loss_per_existing_point = AverageMixin.loss_per_existing_point
+    _add_to_pending = AverageMixin._add_to_pending
+    _remove_from_to_pending = AverageMixin._remove_from_to_pending
+    _add_to_data = AverageMixin._add_to_data
+    ask = AverageMixin.ask

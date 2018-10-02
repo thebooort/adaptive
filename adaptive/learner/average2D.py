@@ -8,7 +8,7 @@ from .learner2D import Learner2D
 from .average_mixin import AverageMixin
 
 
-class AverageLearner2D(AverageMixin, Learner2D):
+class AverageLearner2D(Learner2D):
     def __init__(self, function, bounds, weight=1, loss_per_triangle=None):
         """Same as 'Learner2D', only the differences are in the doc-string.
 
@@ -108,3 +108,14 @@ class AverageLearner2D(AverageMixin, Learner2D):
         f = lambda x: len(x) if which == 'n' else np.std(list(x.values()))
         tmp_learner._data = {k: f(v) for k, v in self._data.items()}
         return tmp_learner.plot()
+
+    data = AverageMixin.data
+    data_sem = AverageMixin.data_sem
+    standard_error = AverageMixin.standard_error
+    mean_values_per_point = AverageMixin.mean_values_per_point
+    get_seed = AverageMixin.get_seed
+    loss_per_existing_point = AverageMixin.loss_per_existing_point
+    _add_to_pending = AverageMixin._add_to_pending
+    _remove_from_to_pending = AverageMixin._remove_from_to_pending
+    _add_to_data = AverageMixin._add_to_data
+    ask = AverageMixin.ask
