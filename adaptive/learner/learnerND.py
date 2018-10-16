@@ -3,6 +3,7 @@ from collections import OrderedDict, Iterable
 import heapq
 import itertools
 import random
+import time
 
 import numpy as np
 from scipy import interpolate
@@ -174,8 +175,13 @@ class LearnerND(BaseLearner):
         # triangulation of the pending points inside a specific simplex
         self._subtriangulations = dict()  # simplex -> triangulation
 
-        # scale to unit
+        # scale to unit hypercube
+        # for the input        
         self._transform = np.linalg.inv(np.diag(np.diff(bounds).flat))
+        # for the output
+        self._min_value = None
+        self._max_value = None
+        self._output_multiplier = 1
 
         # create a private random number generator with fixed seed
         self._random = random.Random(1)
@@ -261,6 +267,7 @@ class LearnerND(BaseLearner):
             to_delete, to_add = tri.add_point(
                 point, simplex, transform=self._transform)
             self.update_losses(to_delete, to_add)
+            self._update_range(value)
 
     def _simplex_exists(self, simplex):
         simplex = tuple(sorted(simplex))
@@ -423,10 +430,8 @@ class LearnerND(BaseLearner):
                                      if p not in self.data)
 
         for simplex in to_add:
-            vertices = self.tri.get_vertices(simplex)
-            values = [self.data[tuple(v)] for v in vertices]
-            loss = float(self.loss_per_simplex(vertices, values))
-            self._losses[simplex] = float(loss)
+            loss = self.compute_loss(simplex)
+            self._losses[simplex] = loss
 
             for p in pending_points_unbound:
                 self._try_adding_pending_point_to_simplex(p, simplex)
@@ -437,6 +442,77 @@ class LearnerND(BaseLearner):
 
             self._update_subsimplex_losses(
                 simplex, self._subtriangulations[simplex].simplices)
+
+    def compute_loss(self, simplex):
+        # get the loss
+        vertices = self.tri.get_vertices(simplex)
+        values = [self.data[tuple(v)] for v in vertices]
+
+        # scale them to a cube with sides 1
+        vertices = vertices @ self._transform 
+        values = self._output_multiplier * values
+
+        # compute the loss on the scaled simplex
+        return float(self.loss_per_simplex(vertices, values))
+
+    def recompute_all_losses(self):
+        """Recompute all losses and pending losses."""
+        # amortized O(N) complexity
+        t_start = time.time()
+        if self.tri is None:
+            return 
+
+        # reset the _simplex_queue
+        self._simplex_queue = []
+
+        # recompute all losses
+        for simplex in self.tri.simplices:
+            loss = self.compute_loss(simplex)
+            self._losses[simplex] = loss
+        
+            # now distribute it around the the children if they are present
+            if simplex not in self._subtriangulations:
+                heapq.heappush(self._simplex_queue, (-loss, simplex, None))
+                continue
+
+            self._update_subsimplex_losses(
+                simplex, self._subtriangulations[simplex].simplices)
+        dt = time.time() - t_start 
+        print(f"time spend recomputing loss={dt:.3f}")
+
+    @property
+    def _scale(self):
+        # get the output scale
+        return self._max_value - self._min_value
+
+    def _update_range(self, new_output):
+        if self._min_value is None or self._max_value is None:
+            # this is the first point, nothing to do, just set the range
+            self._min_value = np.array(new_output)
+            self._max_value = np.array(new_output)
+            self._last_updated_scale = self._scale
+            return False
+
+        # if range in one or more directions is doubled, then update all losses
+        self._min_value = np.minimum(self._min_value, new_output)
+        self._max_value = np.maximum(self._max_value, new_output)
+
+        new_scale = self._scale
+        old_scale = self._last_updated_scale
+        scale_factor = np.max(np.nan_to_num(new_scale / old_scale))
+
+        c = 1 / self._scale
+        # never scale by multiplying with some huge number
+        if isinstance(c, float):
+            c = np.array([c], dtype=float)
+        c[c > 1e10] = 1 
+        self._output_multiplier = c
+
+        if scale_factor > 1.1:
+            self._last_updated_scale = new_scale
+            self.recompute_all_losses()
+            return True
+        return False
 
     def losses(self):
         """Get the losses of each simplex in the current triangulation, as dict
