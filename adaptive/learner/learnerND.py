@@ -181,7 +181,8 @@ class LearnerND(BaseLearner):
         # for the output
         self._min_value = None
         self._max_value = None
-        self._output_multiplier = 1
+        self._output_multiplier = 1 # If we do not know anything, do not scale the values
+        self._recompute_loss_whenever_scale_changes_more_than = 1.1
 
         # create a private random number generator with fixed seed
         self._random = random.Random(1)
@@ -508,7 +509,7 @@ class LearnerND(BaseLearner):
         c[c > 1e10] = 1 
         self._output_multiplier = c
 
-        if scale_factor > 1.1:
+        if scale_factor > self._recompute_loss_whenever_scale_changes_more_than:
             self._last_updated_scale = new_scale
             self.recompute_all_losses()
             return True
