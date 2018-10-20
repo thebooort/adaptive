@@ -106,7 +106,7 @@ class LearnerND(BaseLearner):
     func: callable
         The function to learn. Must take a tuple of N real
         parameters and return a real number or an arraylike of length M.
-    bounds : list of 2-tuples or scipy.spatial.ConvexHull
+    bounds : list of 2-tuples or `scipy.spatial.ConvexHull`
         A list ``[(a_1, b_1), (a_2, b_2), ..., (a_n, b_n)]`` containing bounds,
         one pair per dimension.
         Or a ConvexHull that defines the boundary of the domain.
@@ -159,13 +159,12 @@ class LearnerND(BaseLearner):
             hull_points = bounds.points[bounds.vertices]
             self._bounds_points = list(map(tuple, hull_points))
             self._bbox = tuple(zip(hull_points.min(axis=0), hull_points.max(axis=0)))
+            self._interior = scipy.spatial.Delaunay(self._bounds_points)
         else:
             self._bounds_points = list(map(tuple, itertools.product(*bounds)))
             self._bbox = tuple(tuple(map(float, b)) for b in bounds)
 
         self.ndim = len(self._bbox)
-        self._interior = scipy.spatial.Delaunay(self._bounds_points)
-        # we need this to check that a point is inside the bounds
 
         self.function = func
         self._tri = None
@@ -283,7 +282,11 @@ class LearnerND(BaseLearner):
 
     def inside_bounds(self, point):
         """Check whether a point is inside the bounds."""
-        return self._interior.find_simplex(point, tol=1e-8) >= 0
+        if hasattr(self, '_interior'):
+            return self._interior.find_simplex(point, tol=1e-8) >= 0
+        else:
+            return all(mn <= p <= mx for p, (mn, mx)
+                       in zip(point, self._bbox))
 
     def tell_pending(self, point, *, simplex=None):
         point = tuple(point)
